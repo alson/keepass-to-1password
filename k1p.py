@@ -10,7 +10,10 @@ from bs4 import BeautifulSoup
 
 # Helper
 def normalize(s):
-  return '"%s"' % s.replace('"', '""')
+  if s:
+    return '"%s"' % s.replace('"', '""')
+  else:
+    return '""'
 
 # Setup logging
 script_name = os.path.splitext(os.path.basename(__file__))[0]
@@ -33,20 +36,29 @@ logger.info('KeePass XML file is opened')
 
 passwords = []
 
-for entry in passwords_xml.find_all('entry'):
-  password = {}
-  password['title'] = normalize(entry.title.string)
-  if entry.username.string:
-    password['username'] = normalize(entry.username.string)
-  if entry.password.string:
-    password['password'] = normalize(entry.password.string)
-  if entry.url.string:
-    password['url'] = normalize(entry.url.string.replace('http://', ''))
-  if entry.comment.contents:
-    # Convert <br> to line breaks:
-    notes = '\n'.join(unicode(element) for element in entry.comment.contents if element.name != 'br')
-    password['notes'] = normalize(notes)
-  passwords.append(password)
+for group in passwords_xml.keepassfile.root.find_all('group', recursive=False):
+  for entry in group.find_all('entry', recursive=False):
+    password = {
+      'title': '',
+      'username': '',
+      'password': '',
+      'url': '',
+      'notes': '',
+    }
+    for string in entry.find_all('string', recursive=False):
+      if string.key.string == 'Title':
+        password['title'] = normalize(string.value.string)
+      elif string.key.string == 'UserName':
+        password['username'] = normalize(string.value.string)
+      elif string.key.string == 'Password':
+        password['password'] = normalize(string.value.string)
+      elif string.key.string == 'URL':
+        password['url'] = normalize(string.value.string.replace('http://', '')) if string.value.string else ''
+      elif string.key.string == 'Notes':
+          # Convert <br> to line breaks:
+          notes = '\n'.join(unicode(element) for element in string.value.contents if element.name != 'br')
+          password['notes'] = normalize(notes)
+    passwords.append(password)
 
 # Prepare output file
 env = Environment(loader=PackageLoader('__main__', 'templates'))
